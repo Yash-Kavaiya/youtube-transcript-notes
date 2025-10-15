@@ -6,9 +6,9 @@ on:
       - main
       - master
     paths:
-      - 'config/videos.txt'  # Trigger only when video list changes
+      - 'config/videos.txt'
       - '.github/workflows/youtube-screenshot.yml'
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:
     inputs:
       video_url:
         description: 'YouTube video URL (optional)'
@@ -23,7 +23,7 @@ on:
 jobs:
   process-videos:
     runs-on: ubuntu-latest
-    timeout-minutes: 120  # 2 hours timeout
+    timeout-minutes: 120
     
     steps:
       - name: Checkout repository
@@ -49,11 +49,9 @@ jobs:
 
       - name: Create processing script
         run: |
-          cat > youtube_screenshots.py << 'PYTHON_SCRIPT_EOF'
+          cat > youtube_screenshots.py << 'EOF'
           #!/usr/bin/env python3
-          """
-          Enhanced YouTube Video Screenshot Capture Tool with HD Quality Guarantee
-          """
+          """Enhanced YouTube Video Screenshot Capture Tool"""
           
           import os
           import sys
@@ -66,12 +64,10 @@ jobs:
           import json
           import hashlib
           from PIL import Image
-          import numpy as np
           from datetime import timedelta
           import textwrap
           
           def sanitize_filename(filename, max_length=100):
-              """Remove invalid characters from filename"""
               invalid_chars = '<>:"/\\|?*'
               for char in invalid_chars:
                   filename = filename.replace(char, '')
@@ -82,18 +78,14 @@ jobs:
               return filename
           
           def format_time(seconds):
-              """Convert seconds to readable format"""
               return str(timedelta(seconds=int(seconds)))
           
           def get_video_info(url):
-              """Get video information using yt-dlp"""
               try:
                   cmd = ['yt-dlp', '--dump-json', '--no-playlist', url]
                   result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=30)
                   info = json.loads(result.stdout)
-                  
                   subtitles_available = bool(info.get('subtitles', {})) or bool(info.get('automatic_captions', {}))
-                  
                   return {
                       'title': info.get('title', 'untitled'),
                       'duration': info.get('duration', 0),
@@ -106,41 +98,26 @@ jobs:
                   return None
           
           def download_video_and_transcript(url, video_path, transcript_path, force_hd=True):
-              """Download YouTube video and transcript"""
               try:
                   format_options = [
                       'bestvideo[height>=1080][ext=mp4]+bestaudio[ext=m4a]/best[height>=1080][ext=mp4]',
                       'bestvideo[height>=720][ext=mp4]+bestaudio[ext=m4a]/best[height>=720][ext=mp4]',
                       'best[ext=mp4]/best'
                   ]
-                  
                   cmd = [
-                      'yt-dlp',
-                      '-f', '/'.join(format_options),
-                      '--no-playlist',
-                      '--merge-output-format', 'mp4',
-                      '-o', video_path,
-                      '--write-auto-subs',
-                      '--write-subs',
-                      '--sub-lang', 'en',
-                      '--convert-subs', 'srt',
-                      url
+                      'yt-dlp', '-f', '/'.join(format_options), '--no-playlist',
+                      '--merge-output-format', 'mp4', '-o', video_path,
+                      '--write-auto-subs', '--write-subs', '--sub-lang', 'en',
+                      '--convert-subs', 'srt', url
                   ]
-                  
                   print("Downloading video...")
                   subprocess.run(cmd, check=True)
-                  
-                  # Check for transcript
                   video_dir = os.path.dirname(video_path)
                   video_base = os.path.splitext(os.path.basename(video_path))[0]
-                  
                   subtitle_patterns = [
-                      f"{video_base}.en.srt",
-                      f"{video_base}.en.vtt",
-                      f"{video_base}.srt",
-                      f"{video_base}.vtt"
+                      f"{video_base}.en.srt", f"{video_base}.en.vtt",
+                      f"{video_base}.srt", f"{video_base}.vtt"
                   ]
-                  
                   transcript_found = False
                   for pattern in subtitle_patterns:
                       potential_file = os.path.join(video_dir, pattern)
@@ -148,22 +125,17 @@ jobs:
                           convert_srt_to_text(potential_file, transcript_path)
                           transcript_found = True
                           break
-                  
                   return True, transcript_found
-                  
               except Exception as e:
                   print(f"Error downloading video: {e}")
                   return False, False
           
           def convert_srt_to_text(srt_file, text_file):
-              """Convert SRT subtitle file to plain text"""
               try:
                   with open(srt_file, 'r', encoding='utf-8', errors='ignore') as f:
                       lines = f.readlines()
-                  
                   transcript_lines = []
                   current_text = []
-                  
                   for line in lines:
                       line = line.strip()
                       if line and not line.isdigit() and '-->' not in line:
@@ -172,10 +144,8 @@ jobs:
                       elif not line and current_text:
                           transcript_lines.append(' '.join(current_text))
                           current_text = []
-                  
                   if current_text:
                       transcript_lines.append(' '.join(current_text))
-                  
                   with open(text_file, 'w', encoding='utf-8') as f:
                       f.write("VIDEO TRANSCRIPT\n")
                       f.write("=" * 50 + "\n\n")
@@ -183,71 +153,47 @@ jobs:
                       full_text = re.sub(r'\s+', ' ', full_text)
                       wrapped_text = textwrap.fill(full_text, width=80)
                       f.write(wrapped_text)
-                  
                   return True
               except Exception as e:
                   print(f"Error converting transcript: {e}")
                   return False
           
           def extract_high_quality_screenshots(video_path, output_dir, interval, title_prefix, quality='highest'):
-              """Extract screenshots from video"""
               try:
                   os.makedirs(output_dir, exist_ok=True)
-                  
-                  # Get video duration
                   cmd = [
-                      'ffprobe', '-v', 'error',
-                      '-show_entries', 'format=duration',
-                      '-of', 'default=noprint_wrappers=1:nokey=1',
-                      video_path
+                      'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                      '-of', 'default=noprint_wrappers=1:nokey=1', video_path
                   ]
                   result = subprocess.run(cmd, capture_output=True, text=True, check=True)
                   duration = float(result.stdout.strip())
-                  
                   print(f"Video duration: {duration:.1f} seconds")
                   print(f"Extracting screenshots every {interval} seconds...")
-                  
                   screenshots_taken = 0
                   current_time = 0
                   screenshot_files = []
-                  
                   while current_time <= duration:
                       time_str = f"{int(current_time):04d}s"
-                      
                       if quality == 'highest':
                           output_file = os.path.join(output_dir, f"{title_prefix}_{time_str}.png")
-                          cmd = [
-                              'ffmpeg', '-ss', str(current_time),
-                              '-i', video_path, '-vframes', '1',
-                              '-vf', 'scale=iw:ih', '-y', output_file
-                          ]
+                          cmd = ['ffmpeg', '-ss', str(current_time), '-i', video_path,
+                                 '-vframes', '1', '-vf', 'scale=iw:ih', '-y', output_file]
                       else:
                           output_file = os.path.join(output_dir, f"{title_prefix}_{time_str}.jpg")
-                          cmd = [
-                              'ffmpeg', '-ss', str(current_time),
-                              '-i', video_path, '-vframes', '1',
-                              '-q:v', '1', '-y', output_file
-                          ]
-                      
-                      subprocess.run(cmd, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL, check=True)
-                      
+                          cmd = ['ffmpeg', '-ss', str(current_time), '-i', video_path,
+                                 '-vframes', '1', '-q:v', '1', '-y', output_file]
+                      subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                       screenshots_taken += 1
                       screenshot_files.append(output_file)
-                      
                       progress = (current_time / duration) * 100
                       print(f"  [{progress:5.1f}%] Screenshot at {format_time(current_time)}")
-                      
                       current_time += interval
-                  
                   return screenshots_taken, screenshot_files
-                  
               except Exception as e:
                   print(f"Error extracting screenshots: {e}")
                   return 0, []
           
           def get_image_hash(image_path):
-              """Calculate hash of an image"""
               try:
                   with open(image_path, 'rb') as f:
                       return hashlib.sha256(f.read()).hexdigest()
@@ -255,148 +201,102 @@ jobs:
                   return None
           
           def remove_duplicate_screenshots(screenshot_files):
-              """Remove duplicate screenshots"""
               if len(screenshot_files) <= 1:
                   return 0
-              
               print("\nRemoving duplicate screenshots...")
-              
               duplicates_removed = 0
               files_to_remove = set()
               processed_hashes = {}
-              
               for current_file in screenshot_files:
                   if current_file in files_to_remove or not os.path.exists(current_file):
                       continue
-                  
                   current_hash = get_image_hash(current_file)
                   if not current_hash:
                       continue
-                  
                   if current_hash in processed_hashes:
                       files_to_remove.add(current_file)
                   else:
                       processed_hashes[current_hash] = current_file
-              
               for file_path in files_to_remove:
                   try:
                       os.remove(file_path)
                       duplicates_removed += 1
                   except Exception:
                       pass
-              
               return duplicates_removed
           
           def create_hd_pdf(images_dir, pdf_path, dpi=600):
-              """Create high-quality PDF from images"""
               try:
                   print(f"\nCreating PDF (DPI: {dpi})...")
-                  
-                  image_files = sorted(list(Path(images_dir).glob('*.jpg')) +
-                                     list(Path(images_dir).glob('*.png')))
-                  
+                  image_files = sorted(list(Path(images_dir).glob('*.jpg')) + list(Path(images_dir).glob('*.png')))
                   if not image_files:
                       return False
-                  
                   pdf_images = []
                   for img_path in image_files:
                       try:
                           img = Image.open(img_path)
                           if img.mode != 'RGB':
                               img = img.convert('RGB')
-                          
                           max_dimension = 3000
                           if img.width > max_dimension or img.height > max_dimension:
                               img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
-                          
                           pdf_images.append(img)
                       except Exception:
                           pass
-                  
                   if pdf_images:
                       pdf_images[0].save(
-                          pdf_path, "PDF",
-                          resolution=dpi,
-                          quality=95,
-                          optimize=True,
-                          save_all=True,
-                          append_images=pdf_images[1:] if len(pdf_images) > 1 else []
+                          pdf_path, "PDF", resolution=dpi, quality=95, optimize=True,
+                          save_all=True, append_images=pdf_images[1:] if len(pdf_images) > 1 else []
                       )
-                      
                       file_size = os.path.getsize(pdf_path) / (1024 * 1024)
                       print(f"  ✓ PDF created: {file_size:.2f} MB")
                       return True
-                  
                   return False
-                  
               except Exception as e:
                   print(f"Error creating PDF: {e}")
                   return False
           
           def process_video(url, interval, output_dir='.', quality='highest',
                            pdf_dpi=600, keep_video=False, no_transcript=False, no_pdf=False):
-              """Main processing function"""
-              
-              # Get video info
               print(f"Fetching video information...")
               video_info = get_video_info(url)
               if not video_info:
                   return False
-              
               safe_title = sanitize_filename(video_info['title'])
-              
               print(f"\n{'='*60}")
               print(f"Video: {video_info['title']}")
               print(f"Duration: {format_time(video_info['duration'])}")
               print(f"Uploader: {video_info['uploader']}")
               print(f"{'='*60}\n")
-              
-              # Create directories
               base_dir = Path(output_dir)
               video_dir = base_dir / safe_title
               images_dir = video_dir / 'images'
               images_dir.mkdir(parents=True, exist_ok=True)
-              
               with tempfile.TemporaryDirectory() as temp_dir:
                   video_path = os.path.join(temp_dir, 'video.mp4')
                   transcript_path = video_dir / f"{safe_title}_transcript.txt"
-                  
-                  # Download
                   video_success, transcript_success = download_video_and_transcript(
                       url, video_path, transcript_path if not no_transcript else None
                   )
-                  
                   if not video_success:
                       print("Error: Failed to download video")
                       return False
-                  
                   print(f"\n✓ Video downloaded successfully!")
-                  
-                  # Extract screenshots
                   screenshot_count, screenshot_files = extract_high_quality_screenshots(
                       video_path, images_dir, interval, safe_title, quality
                   )
-                  
                   if screenshot_count > 0:
                       print(f"\n✓ Extracted {screenshot_count} screenshots")
-                      
-                      # Remove duplicates
                       duplicates = remove_duplicate_screenshots(screenshot_files)
                       if duplicates > 0:
                           print(f"✓ Removed {duplicates} duplicates")
                           print(f"  Final: {screenshot_count - duplicates} unique screenshots")
-                      
-                      # Create PDF
                       if not no_pdf:
                           pdf_path = video_dir / f"{safe_title}_HD.pdf"
                           create_hd_pdf(images_dir, pdf_path, pdf_dpi)
-                      
-                      # Keep video if requested
                       if keep_video:
                           final_video_path = video_dir / f"{safe_title}.mp4"
                           shutil.copy2(video_path, final_video_path)
-                      
-                      # Summary
                       print(f"\n{'='*60}")
                       print(f"✅ COMPLETED SUCCESSFULLY!")
                       print(f"{'='*60}")
@@ -407,7 +307,6 @@ jobs:
                       if transcript_success:
                           print(f"📝 Transcript: {transcript_path.name}")
                       print(f"{'='*60}\n")
-                      
                       return True
                   else:
                       print("Error: No screenshots extracted")
@@ -423,17 +322,14 @@ jobs:
               parser.add_argument('--keep-video', action='store_true')
               parser.add_argument('--no-transcript', action='store_true')
               parser.add_argument('--no-pdf', action='store_true')
-              
               args = parser.parse_args()
-              
               success = process_video(
                   args.url, args.interval, args.output_dir,
                   args.quality, args.pdf_dpi, args.keep_video,
                   args.no_transcript, args.no_pdf
               )
-              
               sys.exit(0 if success else 1)
-          PYTHON_SCRIPT_EOF
+          EOF
           
           chmod +x youtube_screenshots.py
           echo "✓ Processing script created"
@@ -453,50 +349,40 @@ jobs:
         if: github.event_name == 'push'
         run: |
           mkdir -p output
-          
-          # Check if videos.txt exists
           if [ -f "config/videos.txt" ]; then
             echo "Processing videos from config/videos.txt"
-            
             while IFS= read -r line || [ -n "$line" ]; do
-              # Skip empty lines and comments
               if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
                 continue
               fi
-              
-              # Extract URL and interval (format: URL,interval)
               URL=$(echo "$line" | cut -d',' -f1 | xargs)
               INTERVAL=$(echo "$line" | cut -d',' -f2 | xargs)
-              
-              # Default interval if not specified
               if [ -z "$INTERVAL" ]; then
                 INTERVAL=5
               fi
-              
               echo "========================================="
               echo "Processing: $URL"
               echo "Interval: $INTERVAL seconds"
               echo "========================================="
-              
               python youtube_screenshots.py \
                 "$URL" \
                 "$INTERVAL" \
                 --output-dir output \
                 --quality highest \
                 --pdf-dpi 600 || echo "Failed to process $URL"
-              
             done < config/videos.txt
           else
             echo "⚠️  No config/videos.txt found. Skipping video processing."
-            echo "Create config/videos.txt with YouTube URLs to process automatically."
           fi
 
       - name: Create summary file
         run: |
-          cat > output/README.md << 'EOF'
+          mkdir -p output
+          CURRENT_DATE=$(date)
+          cat > output/README.md << EOFMARKER
           # YouTube Screenshot Processing Results
           
-          Generated on: $(date)
+          Generated on: ${CURRENT_DATE}
           
           ## Contents
           
@@ -506,7 +392,8 @@ jobs:
           - Individual screenshot images (in subdirectories)
           
           ## Structure
-```
+          
+          \`\`\`
           output/
           ├── [Video_Title_1]/
           │   ├── [Video_Title_1]_HD.pdf
@@ -517,9 +404,14 @@ jobs:
           │       └── ...
           └── [Video_Title_2]/
               └── ...
-```
+          \`\`\`
           
-          EOF
+          ## Workflow
+          
+          - Triggered by: ${{ github.event_name }}
+          - Run number: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
+          EOFMARKER
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -529,24 +421,20 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      - name: Commit and push results (optional)
+      - name: Commit and push results
         if: github.event_name == 'push'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # Add generated files
           git add output/ || true
-          
-          # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "🎬 Auto-generated: YouTube screenshots and PDFs [skip ci]"
-            git push || echo "Push failed - this may be expected if branch is protected"
+            git push || echo "Push failed - may need to configure permissions"
           fi
 
-      - name: Create release (optional)
+      - name: Create release
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[release]')
         uses: softprops/action-gh-release@v1
         with:
